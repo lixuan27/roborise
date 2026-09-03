@@ -1,0 +1,119 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RoboRISE</title><style>
+:root{--fg:#16181d;--mut:#5d646e;--line:#e3e6ea;--bg:#fbfbfc;--code:#f3f5f8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);
+ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.62}
+header{max-width:1000px;margin:0 auto;padding:46px 22px 6px}
+h1{font-size:27px;font-weight:650;letter-spacing:-.01em;margin:0 0 8px;line-height:1.25}
+header p{margin:0;color:var(--mut);font-size:15.5px}
+main{max-width:1000px;margin:0 auto;padding:8px 22px 70px}
+h2{font-size:14.5px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);
+ margin:40px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+p{margin:0 0 14px;font-size:15.5px}
+ul{margin:0 0 14px;padding-left:22px;font-size:15.5px}
+li{margin-bottom:7px}
+.note{color:var(--mut);font-size:14px;margin:-4px 0 16px}
+.grid{display:grid;gap:20px;grid-template-columns:repeat(2,1fr);margin-bottom:26px}
+figure{margin:0}
+video{width:100%;display:block;border-radius:7px;background:#000;border:1px solid var(--line)}
+figcaption{margin-top:7px;font-size:13.5px;color:var(--mut)}
+figcaption b{color:var(--fg);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14.5px;margin:0 0 18px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;background:#f5f7fa}
+pre{background:var(--code);border:1px solid var(--line);border-radius:7px;padding:14px 16px;
+ overflow-x:auto;font-size:13.5px;line-height:1.7;margin:0 0 16px}
+a{color:#1a4fa0}
+footer{max-width:1000px;margin:0 auto;padding:0 22px 60px;color:var(--mut);font-size:13px}
+@media (max-width:820px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<header><h1>RoboRISE: Benchmarking Recursive Self-Improvement through Long-Horizon Robotic Execution</h1>
+<p>A benchmark for robot agent systems, where the unit under test is the whole system rather than a language model or a control policy on its own.</p></header><main>
+<h2>Demos</h2>
+<p class="note">Every clip below comes from an agent that wrote its own perception and control code, ran it in the simulator or on the robot, read the result and revised the code.</p>
+<p><b>Tower of Hanoi in Isaac Sim, built by Kimi K2.5 with Claude Code</b></p><div class="grid">
+<figure><video src="videos/rise_hanoi_45min.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>45 minutes, 1M tokens</b></figcaption></figure>
+<figure><video src="videos/rise_hanoi_3h.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>3 hours, 6M tokens</b></figcaption></figure>
+</div>
+<p><b>Kitchen pick and place, a task trained policy beside an agent written controller</b></p><div class="grid">
+<figure><video src="videos/rise_kitchen_pi05.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>Pi-0.5</b></figcaption></figure>
+<figure><video src="videos/rise_kitchen_qwen.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>Qwen3.8-Flash-Next 125B with Claude Code</b></figcaption></figure>
+</div>
+<p><b>Cluttered bin on a real robot, two base models under the same scaffold</b></p><div class="grid">
+<figure><video src="videos/rise_bin_qwen.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>Qwen3.8-Flash-Next</b></figcaption></figure>
+<figure><video src="videos/rise_bin_opus.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>Claude-Opus-5</b></figcaption></figure>
+</div>
+<p><b>Rubik cube in Isaac Sim, built by Claude-Opus-5 with Claude Code</b></p><div class="grid">
+<figure><video src="videos/rise_cube_2h.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>2 hours, 3M tokens</b></figcaption></figure>
+<figure><video src="videos/rise_cube_5h.mp4" muted loop autoplay playsinline controls preload="metadata"></video><figcaption><b>5 hours, 7M tokens</b></figcaption></figure>
+</div>
+<h2>Problem definition</h2>
+<p>The benchmark measures whether a robot agent can turn task understanding, visual perception, planning, control and execution feedback into one closed loop, and finish tasks that range from basic manipulation to long horizon reasoning and dexterous work while respecting the task rules and the physics. What is measured is the complete agent system, which includes the base model, the prompts, the task state it maintains, the tools it calls, the code it executes and the robot control program it writes.</p>
+<h2>Input, closed loop execution and output</h2>
+<p>The input is the task goal, the visual and proprioceptive observation that the current level allows, and the set of tools the agent may call. The agent commits to no complete trajectory in advance, and instead repeats observation, planning, action, feedback and correction throughout execution. At step t it selects a tool call and a robot action from the current observation and its own task state, the environment applies the action and returns the next observation, and the agent updates its state and then decides whether to continue, to look again, to replan or to attempt recovery.</p>
+<pre>c_t = pi_tool( G, M_t, O_t^L ; U^L )        r_t = U^L( c_t )
+a_t = pi_act ( G, M_t, O_t^L, r_t )
+
+x_{t+1} = F( x_t, a_t )                    O_{t+1}^L = H_L( x_{t+1} )
+M_{t+1} = Update( M_t, O_{t+1}^L, r_t, a_t )
+
+tau_A   = { O_t^L, c_t, r_t, a_t } for t = 0 .. T
+Eval( tau_A, x_{0:T} ) = ( S_task, S_rule, S_physics, E )</pre>
+<p>Here M_t is the task state the agent maintains, r_t is what a tool returns, and E is the auditable evidence, meaning video, observations, trajectories and call logs. Environment feedback returns to the agent and shapes later actions, and the ground truth state and the success decision held by the evaluator stay outside the control loop.</p>
+<h2>Why now</h2>
+<p>Recent work has started to place language models and coding agents inside the robot execution loop.</p><ul>
+<li><b>CaP-X</b> lets an agent compose perception and control primitives, generate executable programs and improve them through multi turn interaction, execution feedback and visual differences. Its results also show that performance still depends heavily on hand designed tool abstractions and scaffolding. <a href="https://arxiv.org/abs/2603.22435">[1]</a></li>
+<li><b>Claude Plays Robotics</b> compares control interfaces that include low level actions, Python controllers, reinforcement learning and pretrained policies. Model behaviour depends strongly on the interface, and in the low level setting the full task success rate stays near 0 to 5.5 percent. <a href="https://www.anthropic.com/research/claude-plays-robotics">[2]</a></li>
+<li><b>Gemini Robotics 2</b> combines vision language action control with embodied reasoning for spatial reasoning, multi step planning and dexterous manipulation. <a href="https://deepmind.google/models/gemini-robotics/">[3]</a></li>
+<li><b>ASPIRE</b> diagnoses failures from robot rollouts, edits the control program, executes again and stores reusable skills, which makes closed loop execution and program iteration explicit. <a href="https://research.nvidia.com/labs/gear/aspire/">[4]</a></li>
+<li><b>ENPIRE</b> brings a coding agent into real robot policy improvement, so it revises a policy from video, trajectories, rewards and failure cases and keeps experiments running through automatic evaluation and automatic reset. <a href="https://research.nvidia.com/labs/gear/enpire/">[5]</a></li>
+</ul><p>Together these results show that agents can already build and operate robot control systems. The observation permissions, tool interfaces, training data and hand written scaffolding differ across systems, which leaves the published numbers hard to compare.</p>
+<h2>Why it matters</h2>
+<p>Robot benchmarks today mostly cover short grasping, placing or navigation tasks, while a real task often consists of tens or hundreds of dependent steps. Tidying a bookshelf, assembling from a drawing and solving a Rubik cube ask for more than locally correct motions. They ask the agent to:</p><ul>
+<li>maintain task state and constraints over a long horizon</li>
+<li>compose vision, grasping, motion planning and control tools correctly</li>
+<li>judge from the actual result whether an action did what it was meant to do</li>
+<li>replan after a grasp offset, a collision or a state estimation error</li>
+<li>avoid error accumulation, rule violations and unrecoverable failures</li>
+<li>finish the task without privileged simulator information</li>
+</ul><p>The benchmark therefore focuses on long horizon state maintenance, tool composition, closed loop correction and failure recovery.</p>
+<h2>Tasks</h2><table><tr><th>Task</th><th>Primary ability</th><th>Success condition</th></tr>
+<tr><td>Tower of Hanoi</td><td>symbolic planning, constraint maintenance, stable pick and place</td><td>all discs moved to the target peg in size order</td></tr>
+<tr><td>Tidy a bookshelf</td><td>target recognition, ordering, placement in a confined space</td><td>book order, position and orientation meet the goal</td></tr>
+<tr><td>Rotate a Rubik cube by a given sequence</td><td>action sequence execution, regrasping, state tracking</td><td>the final state matches the state implied by the sequence</td></tr>
+<tr><td>Solve a Rubik cube</td><td>global state estimation, long horizon planning, dexterous manipulation</td><td>all six faces return to a single colour</td></tr>
+<tr><td>Assemble from a drawing</td><td>drawing comprehension, geometric reasoning, precise assembly</td><td>part connections and final poses meet the drawing</td></tr>
+</table><p class="note">Every task also fixes the initial state distribution, the action interface, the success threshold, the rule violation conditions and the hard physical failure conditions.</p>
+<h2>Access levels</h2>
+<p>A level states what observations, tools, simulator information and training rights the agent may use. All levels share the same task rules, action space and success criteria, and the levels are nested from 1 to 4.</p>
+<table><tr><th>Level</th><th>Allowed</th><th>Restricted</th></tr>
+<tr><td><b>Level 1, RGB geometry</b></td><td>RGB, camera calibration, proprioception, robot model, depth estimation, three dimensional reconstruction, inverse kinematics and motion planning</td><td>native depth, object ground truth, contact information and evaluator state</td></tr>
+<tr><td><b>Level 2, generic grasp model</b></td><td>everything in Level 1 plus frozen generic grasping and contact models</td><td>finetuning any model on benchmark data</td></tr>
+<tr><td><b>Level 3, privileged simulation</b></td><td>everything in Levels 1 and 2 plus official simulator state, contact and rollout for online search and optimisation</td><td>training a task specific policy that persists across episodes</td></tr>
+<tr><td><b>Level 4, task trained policy</b></td><td>everything in Levels 1 to 3 plus a task specific policy trained on task data</td><td>test scenes, test trajectories and evaluator state stay hidden</td></tr>
+</table>
+<p>Level 1 may use optimisation tools such as SciPy and cuRobo and may build an approximate scene model from RGB. What separates Level 3 from Level 1 is reading official simulator ground truth rather than using optimisation. Any policy whose parameters are trained on benchmark task data and kept across episodes belongs to Level 4.</p>
+<h2>Tools</h2><table><tr><th>Category</th><th>Representative tools</th><th>Minimum level</th><th>Use</th></tr>
+<tr><td>Depth and reconstruction</td><td>Depth Pro, Depth Anything V3, later reconstruction models</td><td>1</td><td>depth, point clouds and scene geometry from RGB</td></tr>
+<tr><td>Kinematics and planning</td><td>Pinocchio, SciPy, Pyroki, cuRobo, OMPL</td><td>1</td><td>forward and inverse kinematics, trajectory optimisation, collision aware planning</td></tr>
+<tr><td>Parallel jaw grasping</td><td>GraspNet Baseline</td><td>2</td><td>generate and score grasp candidates</td></tr>
+<tr><td>Dexterous grasping</td><td>DexGraspNet 2.0, GenDexGrasp, CEDex</td><td>2</td><td>generate grasp poses and contact candidates</td></tr>
+<tr><td>Official simulator interface</td><td>state, depth, contact and rollout API</td><td>3</td><td>read ground truth and run online search in simulation</td></tr>
+<tr><td>Task policy</td><td>a finetuned policy model</td><td>4</td><td>execute a policy trained on task data</td></tr>
+</table><p class="note">Low level runtime libraries such as MinkowskiEngine are recorded as implementation dependencies rather than agent tools. Tools such as cuRoboV2, Stream3D and SAM3D join the whitelist once their interfaces and versions are pinned.</p>
+<h2>Evaluation</h2>
+<p>A run counts as a valid success only when task success, rule compliance and physical validity all hold: S_valid = S_task and S_rule and S_physics. The reported numbers are task success rate, valid success rate, rule violation rate, physical failure rate, subgoal completion, recovery rate, execution time, action steps, tokens and tool calls. Every experiment stores the trajectory, the video, the observations the agent actually received, the tool calls, the code edits and the evaluator log, so a failure can be traced and privileged information leaks can be checked.</p>
+<h2>Experiment</h2>
+<p>Stage one compares how well coding agents build robot control systems, with Codex, Claude Code, Kimi Code and DeepSeek Code. An agent may read documentation, write code and run experiments in the public training scenes, and revise its program from video, trajectories and evaluator feedback. Once the development budget is spent the code is frozen and evaluated on hidden test scenes.</p>
+<table><tr><th>Task type</th><th>Development time</th><th>Token budget</th></tr><tr><td>Gripper</td><td>24 hours</td><td>10M</td></tr><tr><td>Dexterous hand</td><td>72 hours</td><td>30M</td></tr></table>
+<p>All agents share the same repository, tool documentation, training scenes, action interface and hidden test scenes. Each run outputs the robot trajectory, the execution video, the evaluator results, the tool and model call logs, and the time, token and compute cost. Stage one can start from the gripper tasks and Levels 1 to 3, with the dexterous hand, online agent execution and Level 4 policy training left as extensions.</p>
+<h2>References</h2><ul>
+<li>Fu, L., Yu, J., El-Refai, K., et al. CaP-X: A Framework for Benchmarking and Improving Coding Agents for Robot Manipulation. arXiv:2603.22435, 2026. <a href="https://arxiv.org/abs/2603.22435">link</a></li>
+<li>Berman, S., Ilie, M., Deng, J., and Freeman, D. Claude Plays Robotics. Anthropic, July 2026. <a href="https://www.anthropic.com/research/claude-plays-robotics">link</a></li>
+<li>Google DeepMind. Gemini Robotics 2. 2026. <a href="https://deepmind.google/models/gemini-robotics/">link</a></li>
+<li>NVIDIA GEAR Lab. ASPIRE: Agentic Skills Discovery for Robotics. 2026. <a href="https://research.nvidia.com/labs/gear/aspire/">link</a></li>
+<li>NVIDIA GEAR Lab. ENPIRE: Agentic Robot Policy Self-Improvement in the Real World. 2026. <a href="https://research.nvidia.com/labs/gear/enpire/">link</a></li>
+</ul>
+</main><footer>Lixuan He. The clips on this page are early runs, and the benchmark is being prepared as an open source project.</footer></body></html>
